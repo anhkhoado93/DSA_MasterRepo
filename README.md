@@ -21,5 +21,6 @@ make
 
 ## Debug 
 VSC C/C++ extension is used for line debugging.
-
+```
 memcheck ./main [path to testcase]
+```
