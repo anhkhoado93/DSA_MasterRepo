@@ -1,0 +1,750 @@
+#include "VM.h"
+
+bool is_in(string list[], int size, string& ins)
+{
+	for(int i = 0; i < size; ++i)
+	{
+		if (ins == list[i]) return 1;
+	}
+	return 0;
+}
+bool isReg(string& str)
+{
+	return regex_match(str, regex("R([1-9]|1[0-5])"));
+}
+bool isDec(string& str)
+{
+	return regex_match(str, regex("0|([1-9][0-9]*)"));
+}
+bool isFlt(string& str)
+{
+	return regex_match(str, regex("[1-9][0-9]*(.[0-9]+)"));
+}
+bool isBoo(string& str)
+{
+	return regex_match(str, regex("true|false"));
+}
+bool isAdr(string& str)
+{
+	return regex_match(str, regex("[0-9]+A"));
+}
+bool isLit(string& str)
+{
+	return isDec(str) || isFlt(str) || isBoo(str) || isAdr(str);
+}
+bool isSrc(string& str)
+{
+	return isReg(str) || isLit(str);
+}
+
+/*========================================================================*/
+
+
+
+void VM::run(string filename)
+{
+	this->loadProgram(filename);
+	// checkSyntax();
+	cpu->execute();
+}
+
+void VM::loadProgram(string file)
+{
+	fstream fs;
+	string ins;
+	fs.open(file, ios::in);
+	int addr = 0;
+
+	while (getline(fs,ins))
+	{
+		if (ins.back() == '\r') ins.pop_back();
+		// if (this->mem_bank->getSize() >= (2<<16))
+		// 	exit(-1);
+
+		// regex("[^ ]+( R([1-9]|1[0-5])(, R([1-9]|1[0-5])|[0-9]+)?)?")
+		
+		// if(not regex_match(ins, regex("[^ ]+( [^ ]+(, [^ ]+)?)?")))
+		// {
+		// 	throw InvalidInstruction(addr);
+		// }
+		
+		regex re("\\s+");
+		regex_token_iterator<std::string::iterator> first(ins.begin(), ins.end(), re, -1);
+		regex_token_iterator<std::string::iterator> end, counter = first;
+		int N = 0, idx = 0;
+		while (counter != end)
+		{
+			++N;
+			++counter;
+		} 
+		if (N > 3) throw InvalidInstruction(addr);
+		string* sptr = new string[N];
+		while (idx < N)
+		{
+			sptr[idx] = string(*first);
+			++first;
+			++idx;
+		}
+		checkSyntax(sptr, N, addr);
+		istring* s = new istring(sptr, addr, N);
+		mem_bank->append(*s);
+
+		++addr;
+	}
+	fs.close();
+}
+
+void VM::clean()
+{
+	// while(mem_bank->getSize()) 
+	// {
+	// 	istring* ptr;
+	// 	ptr = &(mem_bank->pop_front());
+
+	// 	delete[] ptr->sptr;
+	// 	delete ptr;
+	// }
+	mem_bank->clear();
+	ret_addr->clear();
+	cpu->clean();
+	// while(smem_bank->getSize()) 
+	// {
+	// 	datatype* ptr = &smem_bank->pop_front();
+	// 	delete ptr;
+	// }
+	delete mem_bank;
+	delete[] smem_bank;
+	delete cpu;
+	delete ret_addr;
+}
+
+
+
+void VM::checkSyntax(string sptr[],int size , int addr)
+{
+	string two_op[16] = {
+	"Add", "Mul", "Minus", "Div","CompNE", "CmpEQ", 
+	"CmpLT", "CmpLE", "CmpGT", "CmpGE", "Add", "Or",
+	"Load", "Store", "Move", "JumpIf"
+	};
+	string uni_op_dest[2] = {"Not", "Input"};
+	string uni_op_src[3] = {"Jump", "Call", "Output"};
+	string no_op[2]	= {"Return", "Halt"};
+
+	string ins = sptr[0];
+	
+	// if(is_in(arithm, 4, ins))
+	// {
+	// 	if (size != 3) throw InvalidInstruction(addr);
+	// 	string& dest = sptr[1], src = sptr[2];
+	// 	sptr[1].pop_back();
+	// 	if (!isReg(dest) || !isSrc(src)) throw InvalidOperand(addr);
+	// }
+	// else if(is_in(cmpare, 6, ins))
+	// {
+	// 	if (size != 3) throw InvalidInstruction(addr);
+	// 	string& dest = sptr[1], src = sptr[2];
+	// 	sptr[1].pop_back();
+	// 	if (!isReg(dest) || !isSrc(src)) throw InvalidOperand(addr);
+	// }
+
+
+
+		if(is_in(two_op, 16, ins))
+		{
+			if (size != 3) throw InvalidInstruction(addr);
+			string& dest = sptr[1], src = sptr[2];
+			if (sptr[1].back() != ',') throw InvalidInstruction(addr);
+			sptr[1].pop_back();
+			if (!isReg(dest) || !isSrc(src)) 
+				throw InvalidOperand(addr);
+		}
+		else if (is_in(uni_op_dest, 2, ins))
+		{
+			if (size != 2) throw InvalidInstruction(addr);
+			string& dest = sptr[1];
+			if (!isReg(dest)) throw InvalidOperand(addr);
+		}
+		else if (is_in(uni_op_src, 3, ins))
+		{
+			if (size != 2) throw InvalidInstruction(addr);
+			string& src = sptr[1];
+			if (!isSrc(src)) throw InvalidOperand(addr);
+		}
+		else if (is_in(no_op, 2, ins))
+		{
+			if (size != 1) throw InvalidInstruction(addr);
+		}
+		else throw InvalidInstruction(addr);
+	
+	
+}
+
+
+
+/*========================================================================*/
+
+
+
+void CPU::execute()
+{
+	string arithm[4] = {"Add", "Mul", "Minus", "Div"};
+	string cmpare[6] = {"CmpNE", "CmpEQ", 
+		"CmpLT", "CmpLE", "CmpGT", "CmpGE"};
+	string logins[3] = {"Not", "And", "Or"};
+	string inout[2]  = {"Input", "Output"};
+	string lsins[3]  = {"Move", "Load", "Store"};
+	string seqctr[5] = {"Jump", "JumpIf", "Call", "Return", "Halt"};
+
+	List<istring>& ptr = *prog;
+	istring* ins = ptr[ins_ptr];
+	while(true)
+	{
+		string cmd = ins->sptr[0];
+		int addr = ins->addr;
+		if(is_in(arithm, 4, cmd))
+		{
+			type __op1 = getType(ins->sptr[1]);
+			type __op2 = getType(ins->sptr[2]);
+
+			bool cond = (__op1 == type::INT ||  __op1 == type::FLOAT) && 
+					(__op2 == type::INT ||  __op2 == type::FLOAT);
+			if (!cond) throw TypeMismatch(addr);
+			
+			type __re = (__op1 == type::INT && __op2 == type::INT)? (type::INT): (type::FLOAT);
+
+			float __o1, __o2, ans;
+			datatype& reg1 = loadReg(ins->sptr[1]);
+			__o1 = (__op1 == type::INT)? (float)reg1.ivalue: reg1.fvalue;
+			
+			if (ins->sptr[2][0] == 'R')
+			{
+				datatype& reg2 = loadReg(ins->sptr[2]);
+				__o2 = (__op2 == type::INT)? (float)reg2.ivalue: reg2.fvalue;
+			}
+			else 
+			{
+				try
+				{
+					__o2 = (__op2 == type::INT)? (float)stoi(ins->sptr[2]): stof(ins->sptr[2]);
+				}
+				catch(exception& e)
+				{
+					throw InvalidOperand(addr);
+				}
+				
+			}
+			if(cmd == "Add") 		ans = __o1 + __o2;
+			else if(cmd == "Minus") ans = __o1 - __o2;
+			else if(cmd == "Mul") 	ans = __o1 * __o2;
+			else if(cmd == "Div") 	
+			{
+				if (__o2 == 0) throw DivideByZero(addr);
+				ans = __o1 / __o2;
+			}
+
+			reg1.updateType(__re, ans);
+		}
+		
+		else if(is_in(cmpare, 4, cmd))
+		{
+			type __op1 = getType(ins->sptr[1]);
+			type __op2 = getType(ins->sptr[2]);
+			bool cond = 
+				(((__op1 == type::INT ||  __op1 == type::FLOAT) && 
+					(__op2 == type::INT ||  __op2 == type::FLOAT)) 
+				|| (__op1 == type::BOOL &&  __op2 == type::BOOL));
+			if (!cond) 
+				throw TypeMismatch(addr);
+			
+
+			float __o1, __o2, ans;
+			datatype& reg1 = loadReg(ins->sptr[1]);
+			__o1 = ((__op1 == type::FLOAT)? reg1.fvalue: (__op1 == type::INT)? (float)reg1.ivalue: (float)reg1.bvalue);
+			
+			if (ins->sptr[2][0] == 'R')
+			{
+				datatype& reg2 = loadReg(ins->sptr[2]);
+				__o2 = ((__op2 == type::FLOAT)? reg2.fvalue: (__op2 == type::INT)? (float)reg2.ivalue: (float)reg2.bvalue);
+			}
+			else 
+			{
+				__o2 = ((__op2 == type::FLOAT)? stof(ins->sptr[2]): (__op2 == type::INT)? stof(ins->sptr[2]): (float)(ins->sptr[2] == "true"));
+			}
+			if(cmd == "CmpEQ") 			ans = (__o1 == __o2);
+			else if(cmd == "CmpNE") 	ans = (__o1 != __o2);
+			else if(cmd == "CmpLE") 	ans = (__o1 <= __o2);
+			else if(cmd == "CmpGE")		ans = (__o1 >= __o2);
+			else if(cmd == "CmpGT")		ans = (__o1 >  __o2);
+			else if(cmd == "CmpLT") 	ans = (__o1 <  __o2);
+
+
+			reg1.updateType(type::BOOL, (bool)ans);
+		}
+
+		else if(is_in(logins, 3, cmd))
+		{
+			datatype& reg = loadReg(ins->sptr[1]);
+			if (reg.typ != type::BOOL) throw TypeMismatch(addr);
+			bool __o1 = reg.bvalue;
+			if (cmd == "Not")
+				reg.updateType(type::BOOL, !__o1);
+			else
+			{
+				bool __o2;
+				if(ins->sptr[2][0] == 'R')  
+				{
+					datatype& ref = loadReg(ins->sptr[2]);
+					if (ref.typ != BOOL) throw TypeMismatch(addr);
+					__o2 = loadReg(ins->sptr[2]).bvalue;
+				}
+				else  
+				{
+					if (ins->sptr[2] != "true" && ins->sptr[2] != "false") 
+						throw TypeMismatch(addr);
+					__o2 = ins->sptr[2] == "true";
+				}
+				if (cmd == "And") reg.updateType(type::BOOL, __o1 && __o2);
+				else reg.updateType(type::BOOL, __o1 || __o2);
+			}
+		
+		}
+		
+		else if(is_in(inout, 2,cmd))
+		{
+			if (cmd == "Input")
+			{
+				string s;
+				cin >> s;
+				if (!isLit(s) || isAdr(s)) throw InvalidInput(addr);
+				loadReg(ins->sptr[1]).updateType(getType(s), stof(s));
+			}
+			else
+			{
+				if (ins->sptr[1][0] == 'R')
+				{
+					datatype& t = loadReg(ins->sptr[1]);
+					if (t.typ == NONE) throw TypeMismatch(addr);
+					else if (t.typ == INT) cout <<  t.ivalue;
+					else if (t.typ == FLOAT) cout << t.fvalue;
+					else if (t.typ == BOOL) cout << t.bvalue;
+					else if (t.typ == ADDR) cout << t.dvalue << 'A';
+				}
+				else
+				{
+					if(!isLit(ins->sptr[1])) throw TypeMismatch(addr);
+					cout << ins->sptr[1];
+				}
+			}
+		}
+		
+		else if(is_in(lsins, 3, cmd))
+		{
+			if (cmd == "Move")
+			{
+				datatype& reg1 = loadReg(ins->sptr[1]);
+				if (ins->sptr[2][0] == 'R')
+				{
+					datatype& reg2 = loadReg(ins->sptr[2]);
+					if (reg2.typ == type::NONE)
+						throw TypeMismatch(addr);
+					reg1.updateType(reg2);
+				}
+				else
+				{
+					if (!isLit(ins->sptr[2]))
+						throw TypeMismatch(addr);
+					type __op2 = getType(ins->sptr[2]);
+					try
+					{
+						if (__op2 == INT) reg1.updateType(__op2, stoi(ins->sptr[2]));
+						else if (__op2 == FLOAT) reg1.updateType(__op2, stof(ins->sptr[2]));
+						else if (__op2 == BOOL) reg1.updateType(__op2, ins->sptr[2] == "true");
+						else if (__op2 == ADDR) 
+						{
+							string temp = ins->sptr[2];
+							temp.pop_back();
+							reg1.updateType(__op2, stoi(temp));
+						}
+					}
+					catch(exception& e)
+					{
+						throw InvalidOperand(addr);
+					}
+					
+					
+				}
+			}
+			else if (cmd == "Load")
+			{
+				datatype& reg1 = loadReg(ins->sptr[1]);
+				if (getType(ins->sptr[2]) != type::ADDR)
+					throw TypeMismatch(addr);
+				if (ins->sptr[2][0] == 'R')
+				{
+					datatype& t = loadReg(ins->sptr[2]);
+					datatype& d = loadMem(t.dvalue);
+					reg1.updateType(d);
+				}
+				else
+				{
+					string temp = ins->sptr[2];
+					temp.pop_back();
+					try
+					{
+						datatype& ref = loadMem(stoi(temp));
+						reg1.updateType(ref);
+					}
+					catch(exception& e) { throw InvalidOperand(addr); }
+					
+					
+				}
+			}
+			else if (cmd == "Store")
+			{
+				datatype& reg1 = loadReg(ins->sptr[1]);
+				type __op2 = getType(ins->sptr[2]);
+				if (reg1.typ != type::ADDR || __op2 == type::NONE)
+					throw TypeMismatch(addr);
+				datatype& ref = loadMem(reg1.dvalue);
+				if (ins->sptr[2][0] == 'R')
+				{
+					datatype& reg2 = loadReg(ins->sptr[2]);
+					ref.updateType(reg2);
+				}
+				else
+				{
+					try
+					{
+						if (__op2 == INT) ref.updateType(__op2, stoi(ins->sptr[2]));
+						else if (__op2 == FLOAT) ref.updateType(__op2, stof(ins->sptr[2]));
+						else if (__op2 == BOOL) ref.updateType(__op2, ins->sptr[2] == "true");
+						else if (__op2 == ADDR) 
+						{
+							string temp = ins->sptr[2];
+							temp.pop_back();
+							ref.updateType(__op2, stoi(temp));
+						}
+					}
+					catch(const std::exception& e)
+					{
+						throw InvalidOperand(addr);
+					}
+					
+				}
+				
+			}
+		}
+
+		else if (is_in(seqctr,5, cmd))
+		{
+			if (cmd == "Halt") break;
+			else if (cmd == "Jump")
+			{
+				if (getType(ins->sptr[1]) != type::ADDR)
+					throw TypeMismatch(addr);
+				int addr_v;
+				if(ins->sptr[1][0] == 'R')
+				{
+					datatype& ref = loadReg(ins->sptr[1]);
+					addr_v = ref.dvalue;
+				}
+				else
+				{
+					string a =ins->sptr[1];
+					a.pop_back();
+					try
+					{
+						addr_v = stoi(a);
+					}
+					catch(const std::exception& e)
+					{
+						throw InvalidOperand(addr);
+					}
+					
+				}
+				if (addr_v  < 0 || addr_v >= ptr.getSize())
+					throw InvalidDestination(addr);
+				// datatype* d = new datatype();
+				// d->typ = ADDR;
+				// d->dvalue = ins_ptr;
+				// // push current address to stack
+				// stack->push(*d);
+				//
+				ins_ptr = addr_v;
+				ins = ptr[ins_ptr];
+				// Skip increment 
+				continue;
+			}
+			else if (cmd == "JumpIf")  
+			{
+				if (getType(ins->sptr[1]) != type::BOOL || getType(ins->sptr[2]) != type::ADDR)
+					throw TypeMismatch(addr);
+				bool s = loadReg(ins->sptr[1]).bvalue;
+				if (s)
+				{
+					int addr_v;
+					if(ins->sptr[2][0] == 'R')
+					{
+						datatype& ref = loadReg(ins->sptr[2]);
+						addr_v = ref.dvalue;
+					}
+					else
+					{
+						string a =ins->sptr[2];
+						a.pop_back();
+						addr_v = stoi(a);
+					}
+					if (addr_v  < 0 || addr_v >= ptr.getSize())
+						throw InvalidDestination(addr);
+					// datatype* d = new datatype();
+					// d->typ = ADDR;
+					// d->dvalue = ins_ptr;
+					// // push current address to stack
+					// stack->push(*d);
+					//
+					ins_ptr = addr_v;
+					ins = ptr[ins_ptr];
+					// Skip increment 
+					continue;
+				}
+				
+			}
+			else if (cmd == "Call")
+			{
+				if (getType(ins->sptr[1]) != type::ADDR)
+					throw TypeMismatch(addr);
+				int addr_v;
+				if(ins->sptr[1][0] == 'R')
+				{
+					datatype& ref = loadReg(ins->sptr[1]);
+					addr_v = ref.dvalue;
+				}
+				else
+				{
+					string a =ins->sptr[1];
+					a.pop_back();
+					try
+					{
+						/* code */
+					}
+					catch(const std::exception& e)
+					{
+						throw InvalidOperand(addr);
+					}
+					
+					addr_v = stoi(a);
+				}
+				if (addr_v  < 0 || addr_v >= ptr.getSize())
+					throw InvalidDestination(addr);
+				datatype* d = new datatype();
+				d->typ = ADDR;
+				d->dvalue = ins_ptr;
+				// push current address to stack
+				stack->push(*d);
+				//
+				ins_ptr = addr_v;
+				ins = ptr[ins_ptr];
+				// Skip increment 
+				continue;
+			}
+			else if (cmd == "Return")
+			{
+				datatype* t = stack->pop();
+
+				ins_ptr = t->dvalue;
+				ins = ptr[ins_ptr];
+				delete t;
+			}
+		}
+		
+		
+		ins = ins->next;
+		++ins_ptr;
+	}
+}
+
+type CPU::getType(string& str)
+{
+	if (isDec(str)) return type::INT;
+	if (isFlt(str)) return type::FLOAT;
+	if (isBoo(str)) return type::BOOL;
+	if (isAdr(str)) return type::ADDR;
+	if (isReg(str)) return loadReg(str).typ;
+	return type::NONE;
+}
+
+datatype& CPU::loadReg(string& str)
+{
+	return registers[stoi(str.substr(1))];
+}
+
+datatype& CPU::loadMem(int addr)
+{
+	return sref[addr];
+}
+
+void CPU::clean()
+{
+
+};
+
+
+
+/*========================================================================*/
+
+
+
+
+void RStack::push(datatype& ele)
+{
+	if (stack->getSize() == 1000)
+		throw StackFull(ele.addr);
+	stack->append(ele);
+}
+
+datatype* RStack::pop()
+{
+	return stack->pop_back();
+}
+
+int RStack::getStackSize()
+{
+	return stack->getSize();
+}
+
+bool RStack::isEmpty()
+{
+	return stack->getSize() == 0;
+}
+
+void RStack::clear()
+{
+	stack->clear();
+	return;
+}
+
+
+
+/*========================================================================*/
+
+
+
+
+template<typename T>
+int List<T>::append(T& ele)
+{
+	if (!this->head and !this->tail)
+		this->head = this->tail = &ele;
+	else
+	{
+		this->tail->next = &ele;
+		this->tail = &ele;
+	}
+	this->size++;
+	return 0;
+}
+
+// template<typename T>
+// int List<T>::insertFront(T& ele)
+// {
+// 	if (!this->head and !this->tail)
+// 		this->head = this->tail = &ele;
+// 	else
+// 	{
+// 		ele.next = this->head;
+// 		this->head = &ele;
+// 	}
+// 	this->size++;
+// 	return 0;
+// }
+
+template<typename T>
+int List<T>::getSize()
+{
+	return this->size;
+}
+
+template<typename T>
+T* List<T>::pop_back()
+{
+	if (this->size <= 0) return nullptr;
+	else
+	{
+		T* ret,*temp = this->head;
+		if (this->head == this->tail)
+		{
+			ret = this->head;
+			this->head = this->tail = nullptr;
+			return ret;
+		}
+		while (temp->next != this->tail) temp = temp->next;
+		ret = this->tail;
+		this->tail = temp;
+		this->tail->next = nullptr;
+		this->size--;
+		return ret;
+	}
+
+}
+
+// template<typename T>
+// T& List<T>::pop_front()
+// {
+// 	if (this->size <= 0);
+// 	else
+// 	{
+// 		T* ret = this->head;
+// 		this->head = this->head->next;
+// 		ret->next =  nullptr;
+// 		this->size--;
+// 		return *ret;
+// 	}
+// }
+
+template<typename T>
+T* List<T>::atIndex(int idx)
+{
+	T* ptr = this->head;
+	while(ptr)
+	{
+		if (ptr->addr == idx)
+			return ptr;
+		ptr = ptr->next;
+	}
+
+	return nullptr;
+}
+
+template<typename T>
+T* List<T>::operator[](int idx)
+{
+	return atIndex(idx);
+}
+
+
+// template<typename T>
+// T* List<T>::begin()
+// {
+// 	return this->head;
+// }
+
+
+template<typename T>
+void List<T>::clear()
+{
+	if (this->head == nullptr) return;
+	T* temp = head;
+	while(true)
+	{
+		T* next = temp->next;
+		delete temp;
+		if (next == nullptr) break;
+		temp = next;
+	}
+}
+
+
+
+/*========================================================================*/
+

@@ -1,0 +1,8 @@
+Move R1, false
+Call 4A
+Output 2
+Move R1, true
+Output 2.5
+JumpIf R1, 7A
+Return
+Halt

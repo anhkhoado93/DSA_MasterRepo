@@ -1,0 +1,73 @@
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
+Move R1, 1
+Output R1
+Halt
