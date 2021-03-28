@@ -23,7 +23,7 @@ bool Util::isDec(string& str)
 
 bool Util::isFlt(string& str)
 {
-	return regex_match(str, regex("[1-9][0-9]*(.[0-9]+)"));
+	return regex_match(str, regex("([1-9][0-9]*)(.[0-9]+)"));
 }
 
 bool Util::isBoo(string& str)
@@ -33,7 +33,8 @@ bool Util::isBoo(string& str)
 
 bool Util::isAdr(string& str)
 {
-	return regex_match(str, regex("[0-9]+A"));
+	return (regex_match(str, regex("[0-9]+A")) 
+		&& (str.length() < 5 || str.length() == 5 && str < "65536"));
 }
 
 bool Util::isLit(string& str)
@@ -70,25 +71,17 @@ void VM::loadProgram(string file)
 		if (ins.back() == '\r') ins.pop_back();
 		
 		if(not regex_match(ins, regex("[^ ]+( [^ ]+(, [^ ]+)?)?")))
-		{
 			throw InvalidInstruction(addr);
-		}
 		
 		regex re("\\s+");
-		regex_token_iterator<std::string::iterator> first(ins.begin(), ins.end(), re, -1);
-		regex_token_iterator<std::string::iterator> end, counter = first;
-		int N = 0, idx = 0;
-		while (counter != end)
-		{
-			++N;
-			++counter;
-		} 
+		regex_token_iterator<string::iterator> first(ins.begin(), ins.end(), re, -1);
+		regex_token_iterator<string::iterator> end, counter = first;
 		string temp[3] = {"", "", ""};
-		while (idx < N)
+		int N;
+		for (N = 0; N < 3; ++N, ++first)
 		{
-			temp[idx] = string(*first);
-			++first;
-			++idx;
+			if (first == end) break;
+			temp[N] = string(*first);
 		}
 		checkSyntax(temp, N, addr);
 		istring* s = new istring(temp, addr, N);
@@ -129,7 +122,6 @@ void VM::checkSyntax(string s_arr[],int size , int addr)
 		{
 			if (size != 3) throw InvalidInstruction(addr);
 			string& dest = s_arr[1], src = s_arr[2];
-			// if (s_arr[1].back() != ',') throw InvalidInstruction(addr);
 			s_arr[1].pop_back();
 			if (!Util::isReg(dest) || !Util::isSrc(src)) 
 				throw InvalidOperand(addr);
@@ -151,8 +143,6 @@ void VM::checkSyntax(string s_arr[],int size , int addr)
 			if (size != 1) throw InvalidInstruction(addr);
 		}
 		else throw InvalidInstruction(addr);
-	
-	
 }
 
 
@@ -167,6 +157,7 @@ CPU::CPU(List<istring>* mem, datatype* smem, RStack* s)
 	sref = smem;
 	stack = s;
 } 
+
 void CPU::execute()
 {
 	string arithm[4] = {"Add", "Mul", "Minus", "Div"};
@@ -221,11 +212,9 @@ void CPU::execute()
 		{
 			type __op1 = getType(ins->s_arr[1]);
 			type __op2 = getType(ins->s_arr[2]);
-			bool cond = 
-				(((__op1 == type::INT ||  __op1 == type::FLOAT) && 
-					(__op2 == type::INT ||  __op2 == type::FLOAT)) 
-				|| (__op1 == type::BOOL &&  __op2 == type::BOOL));
-			if (!cond) 
+			bool cond1 = (__op1 == type::INT ||  __op1 == type::FLOAT) && (__op2 == type::INT ||  __op2 == type::FLOAT);
+			bool cond2 = __op1 == type::BOOL &&  __op2 == type::BOOL && (cmd == "CmpEQ" || cmd == "CmpNE");
+			if (!(cond1 || cond2)) 
 				throw TypeMismatch(addr);
 			
 
@@ -285,7 +274,9 @@ void CPU::execute()
 			string s;
 			cin >> s;
 			if (!Util::isLit(s) || Util::isAdr(s)) throw InvalidInput(addr);
-			loadReg(ins->s_arr[1]).updateType(getType(s), stof(s));
+			type typ = getType(s);
+			if (s == "true" || s == "false") (s = (s == "true")? "1": "0");
+			loadReg(ins->s_arr[1]).updateType(typ, stof(s));
 		}
 		else  if (cmd == "Output")
 		{
@@ -295,7 +286,7 @@ void CPU::execute()
 				if (t.typ == NONE) throw TypeMismatch(addr);
 				else if (t.typ == INT) cout <<  t.ivalue;
 				else if (t.typ == FLOAT) cout << t.fvalue;
-				else if (t.typ == BOOL) cout << t.bvalue;
+				else if (t.typ == BOOL) cout << ((t.bvalue)? "true":"false");
 				else if (t.typ == ADDR) cout << t.dvalue << 'A';
 			}
 			else
@@ -394,12 +385,6 @@ void CPU::execute()
 			}
 			if (addr_v  < 0 || addr_v >= ptr.getSize())
 				throw InvalidDestination(addr);
-			// datatype* d = new datatype();
-			// d->typ = ADDR;
-			// d->dvalue = ins_ptr;
-			// // push current address to stack
-			// stack->push(*d);
-			//
 			ins_ptr = addr_v;
 			ins = ptr[ins_ptr];
 			// Skip increment 
@@ -426,12 +411,6 @@ void CPU::execute()
 				}
 				if (addr_v  < 0 || addr_v > ptr.getSize())
 					throw InvalidDestination(addr);
-				// datatype* d = new datatype();
-				// d->typ = ADDR;
-				// d->dvalue = ins_ptr;
-				// // push current address to stack
-				// stack->push(*d);
-				//
 				ins_ptr = addr_v;
 				ins = ptr[ins_ptr];
 				// Skip increment 
@@ -461,6 +440,7 @@ void CPU::execute()
 			d->typ = ADDR;
 			d->dvalue = ins_ptr;
 			// push current address to stack
+			if (stack->getStackSize() >= 1000) throw StackFull(addr);
 			stack->push(*d);
 			//
 			ins_ptr = addr_v;
@@ -471,7 +451,7 @@ void CPU::execute()
 		else if (cmd == "Return")
 		{
 			datatype* t = stack->pop();
-
+			if (t == nullptr) throw InvalidDestination(addr);
 			ins_ptr = t->dvalue;
 			ins = ptr[ins_ptr];
 			delete t;
@@ -518,20 +498,8 @@ void CPU::clean()
 
 
 
-RStack::RStack()
-{
-	this->stack = new List<datatype>;
-}
-
-RStack::~RStack()
-{
-	delete this->stack;
-}
-
 void RStack::push(datatype& ele)
 {
-	if (stack->getSize() == 1000)
-		throw StackFull(ele.addr);
 	stack->append(ele);
 }
 
@@ -560,13 +528,6 @@ void RStack::clear()
 /*========================================================================*/
 
 
-template<typename T>
-List<T>::List()
-{
-	this->head = nullptr;
-	this->tail = nullptr;
-	this->size = 0;
-}
 
 template<typename T>
 int List<T>::append(T& ele)
@@ -608,11 +569,10 @@ T* List<T>::pop_back()
 		this->size--;
 		return ret;
 	}
-
 }
 
 template<typename T>
-T* List<T>::atIndex(int idx)
+T* List<T>::operator[](int idx)
 {
 	T* ptr = this->head;
 	while(ptr)
@@ -621,14 +581,7 @@ T* List<T>::atIndex(int idx)
 			return ptr;
 		ptr = ptr->next;
 	}
-
 	return nullptr;
-}
-
-template<typename T>
-T* List<T>::operator[](int idx)
-{
-	return atIndex(idx);
 }
 
 template<typename T>
@@ -644,8 +597,3 @@ void List<T>::clear()
 		temp = next;
 	}
 }
-
-
-
-/*========================================================================*/
-

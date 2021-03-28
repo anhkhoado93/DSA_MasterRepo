@@ -28,7 +28,11 @@ struct datatype
     // T value;
     int addr = -1;
     datatype* next = nullptr;
-    datatype(){}
+    datatype()
+    {
+      typ = type::NONE;
+      ivalue = 0;
+    }
     
     void updateType(type t,  float val)
     {
@@ -120,13 +124,17 @@ class List
   T*  tail;
   int size;
 public:
-  List();
+  List()
+  {
+    this->head = nullptr;
+    this->tail = nullptr;
+    this->size = 0;
+  }
   int   append(T&);
   int   insertFront(T&);
   int   getSize();
   T*    pop_back();
   T*    pop_front();
-  T*    atIndex(int);
   int   getMaxIndex();
   T*    operator[](int);
   T*    begin();
@@ -138,8 +146,14 @@ class RStack
 {
   List<datatype>* stack;
 public:
-  RStack();
-  ~RStack();
+  RStack()
+  {
+    this->stack = new List<datatype>;
+  }
+  ~RStack()
+  {
+    delete this->stack;
+  }
   void      push(datatype&);
   datatype* pop();
   int       getStackSize();

@@ -13,7 +13,8 @@
                 "request": "launch",
                 "program": "${fileDirname}/${fileBasenameNoExtension}",
                 "args": [
-                    "testcase/prog1.txt"
+                    "testcase/prog2.txt"
+                    "true"
                 ],
                 "stopAtEntry": false,
                 "cwd": "${workspaceFolder}",

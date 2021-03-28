@@ -1,8 +1,9 @@
-Move R1, false
+Call 2A
+Jump 65A
 Call 4A
-Output 2
-Move R1, true
-Output 2.5
-JumpIf R1, 7A
 Return
+Call 6A
+Return
+Return
+Output true
 Halt

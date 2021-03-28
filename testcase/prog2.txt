@@ -1,5 +1,29 @@
-Move R1, 0A
-Store R1, 10
-Load R1, R1
-Output R1
+Call 3A
+Output true
 Halt
+Call 5A
+Return
+Call 7A
+Return
+Call 9A
+Return
+Call 7A
+Return
+Call 11A
+Return
+Call 13A
+Return
+Call 15A
+Return
+Call 17A
+Return
+Call 19A
+Return
+Call 21A
+Return
+Call 23A
+Return
+Call 25A
+Return
+Call 27A
+Return
