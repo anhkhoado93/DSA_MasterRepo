@@ -13,7 +13,6 @@ touch mem.log
 alias memcheck=valgrind --leak-check=full --show-leak-kind=all --log-file=mem.log
 ```
 ## Run
-To compile and run project
 ```
 make 
 ./main [path to testcase]
