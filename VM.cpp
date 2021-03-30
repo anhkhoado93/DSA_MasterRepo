@@ -18,12 +18,12 @@ bool Util::isReg(string& str)
 
 bool Util::isDec(string& str)
 {
-	return regex_match(str, regex("0|([1-9][0-9]*)"));
+	return regex_match(str, regex("(0|([1-9][0-9]*))"));
 }
 
 bool Util::isFlt(string& str)
-{
-	return regex_match(str, regex("([1-9][0-9]*)(.[0-9]+)"));
+{	
+	return regex_match(str, regex("(([1-9][0-9]*|0)\\.[0-9]+)"));
 }
 
 bool Util::isBoo(string& str)
@@ -34,7 +34,7 @@ bool Util::isBoo(string& str)
 bool Util::isAdr(string& str)
 {
 	return (regex_match(str, regex("[0-9]+A")) 
-		&& (str.length() < 5 || str.length() == 5 && str < "65536"));
+		&& (str.length() < 5 || (str.length() == 5 && str < "65536")));
 }
 
 bool Util::isLit(string& str)
@@ -166,7 +166,7 @@ void CPU::execute()
 	string logins[3] = {"Not", "And", "Or"};
 	List<istring>& ptr = *prog;
 	istring* ins = ptr[ins_ptr];
-	while(true)
+	while(ins)
 	{
 		string cmd = ins->s_arr[0];
 		int addr = ins->addr;
@@ -181,7 +181,9 @@ void CPU::execute()
 					(__op2 == type::INT ||  __op2 == type::FLOAT);
 			if (!cond) throw TypeMismatch(addr);
 			
-			type __re = (__op1 == type::INT && __op2 == type::INT)? (type::INT): (type::FLOAT);
+			type __re;
+			if (cmd == "Div") __re = type::FLOAT;
+			else __re = (__op1 == type::INT && __op2 == type::INT)? (type::INT): (type::FLOAT);
 
 			float __o1, __o2, ans;
 			datatype& reg1 = loadReg(ins->s_arr[1]);
@@ -202,7 +204,7 @@ void CPU::execute()
 			else if(cmd == "Div") 	
 			{
 				if (__o2 == 0) throw DivideByZero(addr);
-				ans = __o1 / __o2;
+				ans = float(__o1) / float(__o2);
 			}
 
 			reg1.updateType(__re, ans);
@@ -273,7 +275,7 @@ void CPU::execute()
 		{
 			string s;
 			cin >> s;
-			if (!Util::isLit(s) || Util::isAdr(s)) throw InvalidInput(addr);
+			if (!(Util::isDec(s) || Util::isFlt(s) || Util::isBoo(s))) throw InvalidInput(addr);
 			type typ = getType(s);
 			if (s == "true" || s == "false") (s = (s == "true")? "1": "0");
 			loadReg(ins->s_arr[1]).updateType(typ, stof(s));

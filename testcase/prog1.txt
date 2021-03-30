@@ -1,9 +1,16 @@
-Call 2A
-Jump 65A
-Call 4A
-Return
-Call 6A
-Return
-Return
-Output true
+Move R1, 0
+Move R2, 1
+Move R13, 0
+Input R15
+Output R1
+Move R12, R13
+CmpEQ R12, R15
+JumpIf R12, 15A
+Output R2
+Move R3, R2
+Add R3, R1
+Move R1, R2
+Move R2, R3
+Add R13, 1
+Jump 5A
 Halt
